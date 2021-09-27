@@ -7,16 +7,17 @@ tickerInterval = "10s"
 
 # Path to a BoltDB containing the parameters used by the service
 # Currently it's only needed for PostgreSQL source an can be omitted if this source isn't used.
-boltdb = "/tmp/psql-streamer.bolt"
+# boltdb = "/tmp/psql-streamer.bolt"
+boltdb = "psql-streamer.bolt"
 
 [source.db1]
 type = "postgres"
 
 # PostgreSQL connection DSN
-dsn = "dbname=test sslmode=disable"
+dsn = "dbname=psql-streamer sslmode=disable user=postgres password=pass replication=database"
 
 # Name of the publication in PostgreSQL created with CREATE PUBLICATION
-publication = "pub1"
+publication = "outbox_insert"
 
 # Replication slot represents a unique replication client in the database.
 # PostgreSQL stores the current client WAL positions in the slot (they're updated by the status messages from the client)
@@ -55,83 +56,107 @@ verbose = false
 # Enable debug
 debug = false
 
-[source.kafka1]
-type = "kafka"
+# [source.kafka1]
+# type = "kafka"
 
-# List of kafka brokers in host:port form
-hosts = [ "kafka1:9092", "kafka2:9092", "kafka3:9092" ]
+# # List of kafka brokers in host:port form
+# hosts = [ "kafka1:9092", "kafka2:9092", "kafka3:9092" ]
 
-# List of Kafka topics to fetch events from
-topics = [ "topic1", "topic2" ]
+# # List of Kafka topics to fetch events from
+# topics = [ "topic1", "topic2" ]
 
-# When running several instances with the same groupID on the same Kafka cluster/topic then
-# the events will be distributed evenly between consumers
-groupID = "bar"
+# # When running several instances with the same groupID on the same Kafka cluster/topic then
+# # the events will be distributed evenly between consumers
+# groupID = "bar"
 
-# How frequently to retry sending events to sinks in case of failure
-sendRetryInterval = "100ms"
+# # How frequently to retry sending events to sinks in case of failure
+# sendRetryInterval = "100ms"
 
-# How many messages to get from Kafka before pushing them into sinks.
-# This also sets Kafka library internal queue size
-batchSize = 400
+# # How many messages to get from Kafka before pushing them into sinks.
+# # This also sets Kafka library internal queue size
+# batchSize = 400
 
-# How long to wait for batchSize to fill before flushing the buffer
-batchFlushInterval = "1s"
+# # How long to wait for batchSize to fill before flushing the buffer
+# batchFlushInterval = "1s"
 
-# Verbose mode (logs every event - one line)
-verbose = false
+# # Verbose mode (logs every event - one line)
+# verbose = false
 
-# Enable debug mode
-debug = false
+# # Enable debug mode
+# debug = false
 
-[sink.kafka1]
-type = "kafka"
-sources = [ "kafka1" ]
+# [sink.kafka1]
+# type = "kafka"
+# sources = [ "db1" ]
 
-# List of kafka brokers in host:port form
-hosts = [ "kafka1:9092", "kafka2:9092", "kafka3:9092" ]
+# # List of kafka brokers in host:port form
+# hosts = [ "kafka1:9092", "kafka2:9092", "kafka3:9092" ]
 
-# A list of handlers to enable (currently only "passthrough" is available)
-handlers = [ "passthrough" ]
+# # A list of handlers to enable (currently only "passthrough" is available)
+# handlers = [ "passthrough" ]
 
-# Mapping between table name of event and Kafka topic
-tableTopicMapping = { table1 = "topic1", table2 = "topic2" }
+# # Mapping between table name of event and Kafka topic
+# tableTopicMapping = { table1 = "topic1", table2 = "topic2" }
 
-# This specifies the topic where the messages for which the mapping wasn't found will go.
-# If it's empty or undefined then they will be discarded.
-# At least one of 'tableTopicMapping' or 'fallbackTopic' should be specified.
-topicFallback = "garbageBin"
+# # This specifies the topic where the messages for which the mapping wasn't found will go.
+# # If it's empty or undefined then they will be discarded.
+# # At least one of 'tableTopicMapping' or 'fallbackTopic' should be specified.
+# topicFallback = "garbageBin"
 
-# Timeout for Kafka message sending
-timeout = "2s"
+# # Timeout for Kafka message sending
+# timeout = "2s"
 
-# Maximum delivery attempts that Kafka client will do internally
-maxAttempts = 3
+# # Maximum delivery attempts that Kafka client will do internally
+# maxAttempts = 3
 
-# How frequently to poll cluster for partition changes
-rebalanceInterval = "5s"
+# # How frequently to poll cluster for partition changes
+# rebalanceInterval = "5s"
 
-# -1 : to require all replicas to ACK
-#  0 : no ACKs required
-# >0 : wait for this number of replicas to ACK
-requiredAcks = -1
+# # -1 : to require all replicas to ACK
+# #  0 : no ACKs required
+# # >0 : wait for this number of replicas to ACK
+# requiredAcks = -1
 
-# Enable asynchronous operation. The Kafka library will use batches to dispatch events more efficiently.
-# Be careful - in this mode you can lose events because Kafka library will not report back the errors
-# and we'll always report success to the source as if the messages were sent successfully.
-async = false
+# # Enable asynchronous operation. The Kafka library will use batches to dispatch events more efficiently.
+# # Be careful - in this mode you can lose events because Kafka library will not report back the errors
+# # and we'll always report success to the source as if the messages were sent successfully.
+# async = false
 
-# Number of messages to buffer before sending to Kafka
-batchSize = 100
+# # Number of messages to buffer before sending to Kafka
+# batchSize = 100
 
-# How frequently to flush the queue if batchSize is not yet exceeded.
-# Be advised that this parameter is also used with 'async = false' and messages will be sent no faster than 1sec/batchTimeout.
-# Decreasing this parameter leads to more frequent polling of queue which increases CPU usage even when idle.
-# With 5ms each sink uses around 10% of one core on a MacBook's 3.3Ghz Core i5 7287U.
-batchTimeout = "10ms"
+# # How frequently to flush the queue if batchSize is not yet exceeded.
+# # Be advised that this parameter is also used with 'async = false' and messages will be sent no faster than 1sec/batchTimeout.
+# # Decreasing this parameter leads to more frequent polling of queue which increases CPU usage even when idle.
+# # With 5ms each sink uses around 10% of one core on a MacBook's 3.3Ghz Core i5 7287U.
+# batchTimeout = "10ms"
+
+# # Verbose mode (logs every non-skipped event - one line)
+# verbose = true
+
+# # Enable debug
+# debug = true
+
+[sink.jetstream]
+type = "jetstream"
+sources = ["db1"]
+
+# nats servers
+servers = ["nats://0.0.0.0:40222"]
+
+# auth type
+auth = "token"
+# token if auth type is token
+token = "test"
+
+# name of stream
+streamName = "emailsOutbox"
+
+# subjects for stream
+subjects = ["emails.outbox"]
 
 # Verbose mode (logs every non-skipped event - one line)
-verbose = false
+verbose = true
 
 # Enable debug
-debug = false
+debug = true

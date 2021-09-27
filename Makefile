@@ -15,7 +15,8 @@ build:
 	mkdir -p $(OUT)/root/etc/$(NAME)
 	cp $(NAME).toml $(OUT)/root/etc/$(NAME)
 	go test ./...
-	GOARCH=amd64 GOOS=linux $(GO) build -o $(OUT) -ldflags "-s -w -X main.version=$(VERSION)"
+	# GOARCH=amd64 GOOS=linux $(GO) build -o $(OUT) -ldflags "-s -w -X main.version=$(VERSION)"
+	$(GO) build -o $(OUT) -ldflags "-s -w -X main.version=$(VERSION)"
 
 deb:
 	make build

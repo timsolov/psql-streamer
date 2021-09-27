@@ -19,7 +19,7 @@ import (
 	"github.com/blind-oracle/psql-streamer/sink"
 	"github.com/blind-oracle/psql-streamer/source/prom"
 	"github.com/jackc/pgx"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 // PSQL is a PostgreSQL source
@@ -129,8 +129,8 @@ func New(name string, v *viper.Viper) (s *PSQL, err error) {
 	}
 
 	// Check if we have a WAL position overridden from the config file
-	if s.cfg.walPositionOverride == 0 {
-		// Read WAL position if it's there
+	if s.cfg.walPositionOverride == 0 { // not overriden
+		// Read WAL position from boltDB if it's there
 		if s.cfg.walPositionOverride, err = s.boltDB.CounterGet(s.boltBucket, db.CounterWALPos); err != nil {
 			return nil, fmt.Errorf("Unable to read bolt counter: %s", err)
 		}
@@ -159,6 +159,8 @@ func New(name string, v *viper.Viper) (s *PSQL, err error) {
 	if err = s.setup(); err != nil {
 		return nil, err
 	}
+
+	s.connConfig.Logger = s.Logger
 
 	s.mux, err = mux.New(s.ctx, v,
 		mux.Config{
@@ -197,6 +199,7 @@ func (s *PSQL) Close() error {
 	return nil
 }
 
+// setup creates Replication Connection, creates replication slot if it doesn't exist
 func (s *PSQL) setup() (err error) {
 	// Close the connection if it was already set up
 	if s.conn != nil {
@@ -224,6 +227,7 @@ func (s *PSQL) Name() string {
 }
 
 // Type returns source type
+// Always "Source-PSQL"
 func (s *PSQL) Type() string {
 	return "Source-PSQL"
 }
