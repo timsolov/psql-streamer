@@ -1,7 +1,9 @@
 package jetstream
 
 import (
+	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -24,6 +26,9 @@ type JetStreamSink struct {
 	js         nats.JetStreamContext
 	stream     *nats.StreamInfo
 
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	promTags []string
 	stats    struct {
 		total, errors, noSubject, skipped, messages uint64
@@ -39,6 +44,8 @@ func New(name string, v *viper.Viper) (s *JetStreamSink, err error) {
 		streamName: v.GetString("streamName"),
 		subjects:   v.GetStringSlice("subjects"),
 	}
+
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	var opts []nats.Option
 	switch v.GetString("auth") {
@@ -86,12 +93,36 @@ func (s *JetStreamSink) ProcessEventsBatch(events []event.Event) error {
 
 	start := time.Now()
 	msgCount := 0
+	var (
+		id      int64
+		subject string
+		payload string
+		ok      bool
+	)
 	for _, event := range events {
 		msgCount++
-		s.js.PublishAsync("foo", []byte("OK"))
+
+		if id, ok = event.Columns["id"].(int64); !ok {
+			return fmt.Errorf("id column: absent")
+		}
+		if subject, ok = event.Columns["subject"].(string); !ok {
+			return fmt.Errorf("subject column: absent")
+		}
+		if payload, ok = event.Columns["payload"].(string); !ok {
+			return fmt.Errorf("payload column: absent")
+		}
+		_, err := s.js.PublishAsync(subject, []byte(payload), nats.MsgId(strconv.FormatInt(id, 10)))
+		if err != nil {
+			return fmt.Errorf("publish async to JetStream")
+		}
+
 		s.LogVerboseEv(event.UUID, "Event (%+v)", event)
 	}
-	<-s.js.PublishAsyncComplete()
+	select {
+	case <-s.ctx.Done():
+		return fmt.Errorf("ProcessEventsBatch: aborted by ctx done")
+	case <-s.js.PublishAsyncComplete():
+	}
 
 	s.Debugf("(%d messages) successfully written in %.4f sec", msgCount, time.Since(start).Seconds())
 	atomic.AddUint64(&s.stats.messages, uint64(msgCount))
@@ -104,7 +135,7 @@ func (s *JetStreamSink) Name() string {
 }
 
 func (s *JetStreamSink) Type() string {
-	return "jetstream"
+	return "Sink-JetStream"
 }
 
 // SetLogger sets a logger
@@ -121,10 +152,6 @@ func (s *JetStreamSink) Stats() string {
 		atomic.LoadUint64(&s.stats.messages),
 	)
 
-	// for k, v := range k.eventHandlers {
-	// 	t += fmt.Sprintf(" [%s: %s]", k, v.Stats())
-	// }
-
 	return t
 }
 
@@ -133,6 +160,7 @@ func (s *JetStreamSink) Status() error {
 }
 
 func (s *JetStreamSink) Close() error {
+	s.cancel()
 	s.conn.Close()
 	return nil
 }

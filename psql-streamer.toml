@@ -3,7 +3,7 @@ http = "127.0.0.1:12080"
 
 # Interval between stats logging from sources and sinks
 # Set to 0 to disable
-tickerInterval = "10s"
+tickerInterval = "60s"
 
 # Path to a BoltDB containing the parameters used by the service
 # Currently it's only needed for PostgreSQL source an can be omitted if this source isn't used.
@@ -11,10 +11,10 @@ tickerInterval = "10s"
 boltdb = "psql-streamer.bolt"
 
 [source.db1]
-type = "postgres"
+type = "postgres2"
 
 # PostgreSQL connection DSN
-dsn = "dbname=psql-streamer sslmode=disable user=postgres password=pass replication=database"
+dsn = "host=0.0.0.0 dbname=psql-streamer sslmode=disable user=postgres password=pass replication=database"
 
 # Name of the publication in PostgreSQL created with CREATE PUBLICATION
 publication = "outbox_insert"
@@ -48,13 +48,37 @@ walPositionOverride = 0
 # Service will confirm current walPos minus walRetain bytes as flushed-to-disk to PostgreSQL.
 # IMPORTANT: the walRetain should be large enough to accomodate batchSize number of events,
 # or in case of crash you might lose some events (PostgreSQL will not allow to go backwards in log deep enough)
-walRetain = 1048576
+walRetain = 104857600
 
 # Verbose mode (logs every event - one line)
 verbose = false
 
 # Enable debug
-debug = false
+debug = true
+
+[sink.jetstream]
+type = "jetstream"
+sources = ["db1"]
+
+# nats servers
+servers = ["nats://0.0.0.0:14222"]
+
+# auth type
+auth = "token"
+# token if auth type is token
+token = "test"
+
+# name of stream
+streamName = "emails-outbox"
+
+# subjects for stream
+subjects = ["emails.outbox"]
+
+# Verbose mode (logs every non-skipped event - one line)
+verbose = false
+
+# Enable debug
+debug = true
 
 # [source.kafka1]
 # type = "kafka"
@@ -136,27 +160,3 @@ debug = false
 
 # # Enable debug
 # debug = true
-
-[sink.jetstream]
-type = "jetstream"
-sources = ["db1"]
-
-# nats servers
-servers = ["nats://0.0.0.0:40222"]
-
-# auth type
-auth = "token"
-# token if auth type is token
-token = "test"
-
-# name of stream
-streamName = "emailsOutbox"
-
-# subjects for stream
-subjects = ["emails.outbox"]
-
-# Verbose mode (logs every non-skipped event - one line)
-verbose = true
-
-# Enable debug
-debug = true

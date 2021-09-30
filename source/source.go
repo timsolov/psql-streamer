@@ -7,6 +7,7 @@ import (
 	"github.com/blind-oracle/psql-streamer/sink"
 	kafkasrc "github.com/blind-oracle/psql-streamer/source/kafka"
 	"github.com/blind-oracle/psql-streamer/source/postgres"
+	"github.com/blind-oracle/psql-streamer/source/postgres2"
 	"github.com/spf13/viper"
 )
 
@@ -31,6 +32,8 @@ func Init(name string, v *viper.Viper) (s Source, err error) {
 		return kafkasrc.New(name, v)
 	case "postgres":
 		return postgres.New(name, v)
+	case "postgres2":
+		return postgres2.New(name, v)
 	default:
 		return nil, fmt.Errorf("Unknown sink type: %s", t)
 	}
