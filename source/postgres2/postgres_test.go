@@ -1,4 +1,4 @@
-package postgres
+package postgres2
 
 import (
 	"context"
@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/blind-oracle/psql-streamer/mux"
+	"github.com/jackc/pgconn"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/blind-oracle/pgoutput"
 	"github.com/blind-oracle/psql-streamer/common"
 	"github.com/blind-oracle/psql-streamer/event"
 	"github.com/blind-oracle/psql-streamer/sink"
 	"github.com/blind-oracle/psql-streamer/sink/stub"
+	"github.com/timsolov/pgoutput"
 )
 
 var (
@@ -34,6 +35,7 @@ func TestPSQL(t *testing.T) {
 		relationSet: pgoutput.NewRelationSet(nil),
 		promTags:    []string{"test", "psql"},
 		sinks:       map[string]sink.Sink{},
+		connConfig:  &pgconn.Config{},
 	}
 
 	s.SetLogger(common.LoggerCreate(s, nil))
@@ -50,16 +52,16 @@ func TestPSQL(t *testing.T) {
 		},
 	)
 
-	err := s.process(ins, 1)
+	err := s.process([]pgoutput.Message{ins}, 1)
 	assert.NotNil(t, err)
 
-	err = s.process(rel, 2)
+	err = s.process([]pgoutput.Message{rel}, 2)
 	assert.Nil(t, err)
 
-	err = s.process(upd, 3)
+	err = s.process([]pgoutput.Message{upd}, 3)
 	assert.Nil(t, err)
 
-	err = s.process(del, 4)
+	err = s.process([]pgoutput.Message{del}, 4)
 	assert.Nil(t, err)
 
 	stats := s.Stats()
@@ -77,13 +79,13 @@ func TestPSQL(t *testing.T) {
 			return nil
 		})
 
-	err = s.process(ins, 5)
+	err = s.process([]pgoutput.Message{ins}, 5)
 	assert.Nil(t, err)
 
-	assert.Equal(t, "Source-Postgres", s.Type())
+	assert.Equal(t, "Source-Postgres2", s.Type())
 	assert.Equal(t, "Test", s.Name())
 
-	err = s.process(beg, 6)
+	err = s.process([]pgoutput.Message{beg}, 6)
 	assert.Nil(t, err)
 
 	assert.Nil(t, s.Status())

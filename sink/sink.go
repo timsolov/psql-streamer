@@ -6,7 +6,8 @@ import (
 
 	"github.com/blind-oracle/psql-streamer/common"
 	"github.com/blind-oracle/psql-streamer/event"
-	"github.com/blind-oracle/psql-streamer/sink/kafka"
+	"github.com/blind-oracle/psql-streamer/sink/jetstream"
+	kafkasink "github.com/blind-oracle/psql-streamer/sink/kafka"
 	"github.com/blind-oracle/psql-streamer/sink/stub"
 	"github.com/spf13/viper"
 )
@@ -30,6 +31,8 @@ func Init(name string, v *viper.Viper) (s Sink, err error) {
 	switch t {
 	case "kafka":
 		return kafkasink.New(name, v)
+	case "jetstream":
+		return jetstream.New(name, v)
 	case "stub_log":
 		return stub.New(name, v, func(ev []event.Event) error { log.Printf("%d events dumped", len(ev)); return nil })
 	case "stub_discard":
