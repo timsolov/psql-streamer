@@ -46,7 +46,10 @@ Receive database events from PostgreSQL using logical replication protocol and t
 #### PostgreSQL configuration
 
 - In `postgresql.conf` you need to set `wal_level = logical` to make logical replication possible. You also may need to adjust `max_wal_senders` and `max_replication_slots` to match your requirements.
-- Create a publication in PostgreSQL like this: `CREATE PUBLICATION pub1 FOR ALL TABLES`. This will include in the publication all existing tables and also the ones that will be created in future. If you want only a subset of tables to be replicated - list them specifically. See [PostgreSQL documentation](https://www.postgresql.org/docs/10/static/sql-createpublication.html) for details.
+- Create a publication in PostgreSQL like this: 
+  - `CREATE PUBLICATION pub_all FOR ALL TABLES`. - This will include in the publication all existing tables and also the ones that will be created in future. 
+  - `CREATE PUBLICATION pub_outbox FOR TABLE outbox` - If you want only a subset of tables to be replicated - list them specifically. See [PostgreSQL documentation](https://www.postgresql.org/docs/10/static/sql-createpublication.html) for details.
+  - `CREATE PUBLICATION outbox_insert FOR TABLE outbox WITH (publish = 'insert')` - Create publication for one table with only insert operations. (Very sutable for outbox pattern)
 - Specify the publication name in the _psql-streamer.conf_
 - To request postgres publications: `SELECT * FROM pg_publication`.
 - To request replication slots: `SELECT * FROM pg_replication_slots`. Replication slot stores LSN position of current cursor in WAL Log.
