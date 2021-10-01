@@ -3,7 +3,6 @@ module github.com/blind-oracle/psql-streamer
 go 1.17
 
 require (
-	git.celefish.com/gopkgs/pgoutput v0.0.0-20200721004844-67d829ebea5d
 	github.com/blind-oracle/pgoutput v0.0.0-20181023084406-426dcce50038
 	github.com/coreos/bbolt v1.3.3
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
@@ -26,7 +25,6 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.6.2
 	github.com/stretchr/testify v1.7.0
-	github.com/timsolov/pgoutput v0.0.0-20210930194948-7f5871c2b924
 	google.golang.org/genproto v0.0.0-20200306153348-d950eab6f860 // indirect
 	google.golang.org/grpc v1.27.1
 	google.golang.org/protobuf v1.27.1 // indirect
@@ -55,6 +53,7 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.9.1 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
+	github.com/timsolov/pgoutput v0.1.0 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110 // indirect
 	golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1 // indirect

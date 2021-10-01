@@ -160,8 +160,6 @@ func New(name string, v *viper.Viper) (s *PSQL, err error) {
 		return nil, err
 	}
 
-	s.connConfig.Logger = s.Logger
-
 	s.mux, err = mux.New(s.ctx, v,
 		mux.Config{
 			Callback:     s.persistWAL,

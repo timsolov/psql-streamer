@@ -8,6 +8,8 @@ VERSION := $(shell cat VERSION)
 OUT := .out
 PACKAGE := github.com/blind-oracle/$(NAME)
 
+.PHONY: all build
+
 all: build
 
 build:

@@ -5,7 +5,6 @@ import (
 	"log"
 	"sync/atomic"
 
-	"github.com/jackc/pgx"
 	"github.com/spf13/viper"
 )
 
@@ -19,10 +18,6 @@ type Source interface {
 type Logger struct {
 	debug, verbose int32
 	header         string
-}
-
-func (l *Logger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
-	log.Print(level, msg, data)
 }
 
 // Logf logs!

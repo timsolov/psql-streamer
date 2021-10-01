@@ -19,12 +19,12 @@ import (
 type JetStreamSink struct {
 	name string
 
-	servers    []string
-	streamName string
-	subjects   []string
-	conn       *nats.Conn
-	js         nats.JetStreamContext
-	stream     *nats.StreamInfo
+	servers []string
+	// streamName string
+	// subjects   []string
+	conn   *nats.Conn
+	js     nats.JetStreamContext
+	stream *nats.StreamInfo
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -39,10 +39,10 @@ type JetStreamSink struct {
 // New creates a new JetStream sink
 func New(name string, v *viper.Viper) (s *JetStreamSink, err error) {
 	s = &JetStreamSink{
-		name:       name,
-		servers:    v.GetStringSlice("servers"),
-		streamName: v.GetString("streamName"),
-		subjects:   v.GetStringSlice("subjects"),
+		name:    name,
+		servers: v.GetStringSlice("servers"),
+		// streamName: v.GetString("streamName"),
+		// subjects:   v.GetStringSlice("subjects"),
 	}
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -69,18 +69,18 @@ func New(name string, v *viper.Viper) (s *JetStreamSink, err error) {
 		return nil, fmt.Errorf("could not create Jetstream context: %w", err)
 	}
 
-	if s.stream, err = s.js.StreamInfo(s.streamName); err != nil {
-		// Create the stream, which stores messages received on the subject.
-		cfg := &nats.StreamConfig{
-			Name:     s.streamName,
-			Subjects: s.subjects,
-			Storage:  nats.FileStorage,
-		}
+	// if s.stream, err = s.js.StreamInfo(s.streamName); err != nil {
+	// 	// Create the stream, which stores messages received on the subject.
+	// 	cfg := &nats.StreamConfig{
+	// 		Name:     s.streamName,
+	// 		Subjects: s.subjects,
+	// 		Storage:  nats.FileStorage,
+	// 	}
 
-		if s.stream, err = s.js.AddStream(cfg); err != nil {
-			return nil, fmt.Errorf("could not create NATS stream: %w", err)
-		}
-	}
+	// 	if s.stream, err = s.js.AddStream(cfg); err != nil {
+	// 		return nil, fmt.Errorf("could not create NATS stream: %w", err)
+	// 	}
+	// }
 
 	s.Logger = common.LoggerCreate(s, v)
 	s.promTags = []string{s.Name(), s.Type()}

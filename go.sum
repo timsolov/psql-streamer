@@ -1,6 +1,4 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
-git.celefish.com/gopkgs/pgoutput v0.0.0-20200721004844-67d829ebea5d h1:8qvXj59PMtVPEqmcc5SIWMAzEo81KKU/dFsIEYmNKBg=
-git.celefish.com/gopkgs/pgoutput v0.0.0-20200721004844-67d829ebea5d/go.mod h1:R6QKEXnePVOvpEonhdwDN+/w5IqNTrkwFUxiG33isd4=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/DataDog/zstd v1.4.0 h1:vhoV+DUHnRZdKW1i5UMjAk2G4JY8wN4ayRfYDNdEhwo=
@@ -281,6 +279,10 @@ github.com/subosito/gotenv v1.2.0 h1:Slr1R9HxAlEKefgq5jn9U+DnETlIUa6HfgEzj0g5d7s
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
 github.com/timsolov/pgoutput v0.0.0-20210930194948-7f5871c2b924 h1:1Tcf8mPF0RKFX74d8TTDm9Let9Po3uWNFwtJ8a2GWTE=
 github.com/timsolov/pgoutput v0.0.0-20210930194948-7f5871c2b924/go.mod h1:+5xTecjYDxwBwhz8zHpMbFlqZSBhe1o25KpfSMgcYkQ=
+github.com/timsolov/pgoutput v0.0.0-20211001092240-8a4ca4a362e4 h1:OfP9gZ9w20ndQXQhQysjLU0X/TopKbHbo7uHIrtLRcY=
+github.com/timsolov/pgoutput v0.0.0-20211001092240-8a4ca4a362e4/go.mod h1:+5xTecjYDxwBwhz8zHpMbFlqZSBhe1o25KpfSMgcYkQ=
+github.com/timsolov/pgoutput v0.1.0 h1:obiZlnMYYXvTpcY3uPrdYchrVfHmi8Nq0YLXxfkh8bo=
+github.com/timsolov/pgoutput v0.1.0/go.mod h1:+5xTecjYDxwBwhz8zHpMbFlqZSBhe1o25KpfSMgcYkQ=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
 github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c h1:u40Z8hqBAAQyv+vATcGgV0YCnDjqSL7/q/JyPhhJSPk=
