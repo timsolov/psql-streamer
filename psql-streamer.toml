@@ -68,17 +68,14 @@ auth = "token"
 # token if auth type is token
 token = "test"
 
-# name of stream
-streamName = "emails-outbox"
-
-# subjects for stream
-subjects = ["emails.outbox"]
+# Timeout for JetStream message sending
+timeout = "2s"
 
 # Verbose mode (logs every non-skipped event - one line)
 verbose = false
 
 # Enable debug
-debug = true
+debug = false
 
 # [source.kafka1]
 # type = "kafka"

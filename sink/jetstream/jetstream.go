@@ -19,12 +19,11 @@ import (
 type JetStreamSink struct {
 	name string
 
-	servers []string
-	// streamName string
-	// subjects   []string
-	conn   *nats.Conn
-	js     nats.JetStreamContext
-	stream *nats.StreamInfo
+	servers      []string
+	conn         *nats.Conn
+	js           nats.JetStreamContext
+	stream       *nats.StreamInfo
+	writeTimeout time.Duration
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -39,10 +38,9 @@ type JetStreamSink struct {
 // New creates a new JetStream sink
 func New(name string, v *viper.Viper) (s *JetStreamSink, err error) {
 	s = &JetStreamSink{
-		name:    name,
-		servers: v.GetStringSlice("servers"),
-		// streamName: v.GetString("streamName"),
-		// subjects:   v.GetStringSlice("subjects"),
+		name:         name,
+		servers:      v.GetStringSlice("servers"),
+		writeTimeout: v.GetDuration("timeout"),
 	}
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -68,19 +66,6 @@ func New(name string, v *viper.Viper) (s *JetStreamSink, err error) {
 	if s.js, err = s.conn.JetStream(); err != nil {
 		return nil, fmt.Errorf("could not create Jetstream context: %w", err)
 	}
-
-	// if s.stream, err = s.js.StreamInfo(s.streamName); err != nil {
-	// 	// Create the stream, which stores messages received on the subject.
-	// 	cfg := &nats.StreamConfig{
-	// 		Name:     s.streamName,
-	// 		Subjects: s.subjects,
-	// 		Storage:  nats.FileStorage,
-	// 	}
-
-	// 	if s.stream, err = s.js.AddStream(cfg); err != nil {
-	// 		return nil, fmt.Errorf("could not create NATS stream: %w", err)
-	// 	}
-	// }
 
 	s.Logger = common.LoggerCreate(s, v)
 	s.promTags = []string{s.Name(), s.Type()}
@@ -111,9 +96,10 @@ func (s *JetStreamSink) ProcessEventsBatch(events []event.Event) error {
 		if payload, ok = event.Columns["payload"].(string); !ok {
 			return fmt.Errorf("payload column: absent")
 		}
+
 		_, err := s.js.PublishAsync(subject, []byte(payload), nats.MsgId(strconv.FormatInt(id, 10)))
 		if err != nil {
-			return fmt.Errorf("publish async to JetStream")
+			return fmt.Errorf("publish async to JetStream: %w", err)
 		}
 
 		s.LogVerboseEv(event.UUID, "Event (%+v)", event)
@@ -122,6 +108,8 @@ func (s *JetStreamSink) ProcessEventsBatch(events []event.Event) error {
 	case <-s.ctx.Done():
 		return fmt.Errorf("ProcessEventsBatch: aborted by ctx done")
 	case <-s.js.PublishAsyncComplete():
+	case <-time.After(s.writeTimeout):
+		return fmt.Errorf("ProcessEventsBatch: timeout occurred while publishing messages")
 	}
 
 	s.Debugf("(%d messages) successfully written in %.4f sec", msgCount, time.Since(start).Seconds())
