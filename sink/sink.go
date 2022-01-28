@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/blind-oracle/psql-streamer/common"
-	"github.com/blind-oracle/psql-streamer/event"
-	"github.com/blind-oracle/psql-streamer/sink/jetstream"
-	kafkasink "github.com/blind-oracle/psql-streamer/sink/kafka"
-	"github.com/blind-oracle/psql-streamer/sink/stub"
 	"github.com/spf13/viper"
+	"github.com/timsolov/psql-streamer/common"
+	"github.com/timsolov/psql-streamer/event"
+	"github.com/timsolov/psql-streamer/sink/jetstream"
+	kafkasink "github.com/timsolov/psql-streamer/sink/kafka"
+	"github.com/timsolov/psql-streamer/sink/stub"
 )
 
 // ProcessEventBatchFunc processess event batches

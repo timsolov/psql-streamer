@@ -5,3 +5,4 @@ vendor*
 *.rpm
 *.deb
 .vscode/
+boltdb/

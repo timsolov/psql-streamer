@@ -1,6 +1,6 @@
 # PSQL-Streamer
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/blind-oracle/psql-streamer)](https://goreportcard.com/report/github.com/blind-oracle/psql-streamer)
+[![Go Report Card](https://goreportcard.com/badge/github.com/timsolov/psql-streamer)](https://goreportcard.com/report/github.com/timsolov/psql-streamer)
 [![Coverage Status](https://coveralls.io/repos/github/blind-oracle/psql-streamer/badge.svg?branch=master)](https://coveralls.io/github/blind-oracle/psql-streamer?branch=master)
 [![Build Status](https://travis-ci.org/blind-oracle/psql-streamer.svg?branch=master)](https://travis-ci.org/blind-oracle/psql-streamer)
 
@@ -115,11 +115,11 @@ All requests are GET.
 
 ## Configuration
 
-See [psql-streamer.toml](https://github.com/blind-oracle/psql-streamer/blob/master/psql-streamer.toml) for detailed instructions.
+See [psql-streamer.toml](https://github.com/timsolov/psql-streamer/blob/master/psql-streamer.toml) for detailed instructions.
 
 ## Download
 
-Get RPM or DEB packages from [Releases](https://github.com/blind-oracle/psql-streamer/releases) page
+Get RPM or DEB packages from [Releases](https://github.com/timsolov/psql-streamer/releases) page
 
 ## Build
 

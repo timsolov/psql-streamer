@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/blind-oracle/psql-streamer/common"
-	"github.com/blind-oracle/psql-streamer/event"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/timsolov/psql-streamer/common"
+	"github.com/timsolov/psql-streamer/event"
 )
 
 type sink struct {

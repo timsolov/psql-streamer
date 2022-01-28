@@ -22,13 +22,15 @@ var (
 
 // Event represents a database event
 type Event struct {
-	Host        string
-	Database    string
-	Table       string
-	Action      string
-	WALPosition uint64
-	Timestamp   time.Time
-	UUID        string
+	Host           string
+	Database       string
+	Table          string
+	Action         string
+	WALEndPosition uint64
+	Timestamp      time.Time
+	UUID           string
 
 	Columns map[string]interface{}
+
+	Ack func()
 }

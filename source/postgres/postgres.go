@@ -8,18 +8,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/blind-oracle/psql-streamer/mux"
+	"github.com/timsolov/psql-streamer/mux"
 
 	"github.com/spf13/viper"
 
-	"github.com/blind-oracle/pgoutput"
-	"github.com/blind-oracle/psql-streamer/common"
-	"github.com/blind-oracle/psql-streamer/db"
-	"github.com/blind-oracle/psql-streamer/event"
-	"github.com/blind-oracle/psql-streamer/sink"
-	"github.com/blind-oracle/psql-streamer/source/prom"
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pglogrepl"
 	uuid "github.com/satori/go.uuid"
+	"github.com/timsolov/pgoutput"
+	"github.com/timsolov/psql-streamer/common"
+	"github.com/timsolov/psql-streamer/db"
+	"github.com/timsolov/psql-streamer/event"
+	"github.com/timsolov/psql-streamer/sink"
+	"github.com/timsolov/psql-streamer/source/prom"
 )
 
 // PSQL is a PostgreSQL source
@@ -28,8 +29,8 @@ type PSQL struct {
 
 	cfg psqlConfig
 
-	conn        *pgx.ReplicationConn
-	connConfig  pgx.ConnConfig
+	conn        *pgconn.PgConn
+	connConfig  *pgconn.Config
 	relationSet *pgoutput.RelationSet
 	sub         *pgoutput.Subscription
 	mux         *mux.Mux
@@ -41,8 +42,8 @@ type PSQL struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	walPosition          uint64
-	walPositionPersisted uint64
+	walPosition          uint64 // current WAL position
+	walPositionPersisted uint64 // WAL position saved to BoltDB
 
 	promTags []string
 
@@ -112,7 +113,7 @@ func New(name string, v *viper.Viper) (s *PSQL, err error) {
 		name:        name,
 		boltBucket:  "source_" + name,
 		relationSet: pgoutput.NewRelationSet(nil),
-		sinks:       map[string]sink.Sink{},
+		sinks:       make(map[string]sink.Sink),
 		cfg:         cf,
 	}
 
@@ -136,24 +137,22 @@ func New(name string, v *viper.Viper) (s *PSQL, err error) {
 		}
 	}
 
-	s.walPosition = s.cfg.walPositionOverride
-	s.walPositionPersisted = s.walPosition
+	s.walPosition, s.walPositionPersisted = s.cfg.walPositionOverride, s.cfg.walPositionOverride
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
-	if s.connConfig, err = pgx.ParseDSN(s.cfg.dsn); err != nil {
+	if s.connConfig, err = pgconn.ParseConfig(s.cfg.dsn); err != nil {
 		return nil, fmt.Errorf("Unable to parse DSN: %s", err)
 	}
-
 	// Use custom dialer to be able to cancel the dial process with context
-	s.connConfig.Dial = func(n, a string) (c net.Conn, err error) {
+	s.connConfig.DialFunc = func(ctx context.Context, n, a string) (c net.Conn, err error) {
 		dialer := &net.Dialer{
 			Timeout:   s.cfg.timeout,
 			KeepAlive: 30 * time.Second,
 			DualStack: false,
 		}
 
-		return dialer.DialContext(s.ctx, n, a)
+		return dialer.DialContext(ctx, n, a)
 	}
 
 	if err = s.setup(); err != nil {
@@ -162,7 +161,7 @@ func New(name string, v *viper.Viper) (s *PSQL, err error) {
 
 	s.mux, err = mux.New(s.ctx, v,
 		mux.Config{
-			Callback:     s.persistWAL,
+			Callback:     s.flushWalPosition,
 			ErrorCounter: &s.stats.eventErrors,
 			Logger:       s.Logger,
 		},
@@ -176,84 +175,104 @@ func New(name string, v *viper.Viper) (s *PSQL, err error) {
 }
 
 // Start instructs source to begin streaming the events
-func (s *PSQL) Start() {
-	s.mux.Start()
-	s.wg.Add(1)
-	go s.fetch()
+func (src *PSQL) Start() {
+	src.mux.Start()
+	src.wg.Add(1)
+	go src.fetch()
 }
 
 // Close stops the replication and exits
-func (s *PSQL) Close() error {
-	s.cancel()
-	s.Logf("Closing...")
-	s.wg.Wait()
+func (src *PSQL) Close() error {
+	src.cancel()
+	src.Logf("Closing...")
+	src.wg.Wait()
 
-	s.mux.Close()
+	src.mux.Close()
 
-	if s.conn != nil {
-		return s.conn.Close()
+	if src.conn != nil {
+		return src.conn.Close(src.ctx)
 	}
 
 	return nil
 }
 
 // setup creates Replication Connection, creates replication slot if it doesn't exist
-func (s *PSQL) setup() (err error) {
+func (src *PSQL) setup() (err error) {
 	// Close the connection if it was already set up
-	if s.conn != nil {
-		if err = s.conn.Close(); err != nil {
-			s.Errorf("Unable to close connection: %s", err)
+	if src.conn != nil {
+		if err = src.conn.Close(src.ctx); err != nil {
+			src.Errorf("Unable to close connection: %s", err)
 		}
 	}
 
-	if s.conn, err = pgx.ReplicationConnect(s.connConfig); err != nil {
+	if src.conn, err = pgconn.ConnectConfig(src.ctx, src.connConfig); err != nil {
 		return fmt.Errorf("Unable to open replication connection: %s", err)
 	}
 
-	s.sub = pgoutput.NewSubscription(s.conn, s.cfg.replicationSlot, s.cfg.publication, s.cfg.walRetain, false)
+	src.sub = pgoutput.NewSubscription(
+		src.conn,
+		src.cfg.replicationSlot,
+		src.cfg.publication,
+		pgoutput.SetWALRetain(src.cfg.walRetain),
+		pgoutput.SetFailOnHandler(true),
+		pgoutput.SetLogger(src),
+	)
 
-	if err = s.sub.CreateSlot(); err != nil {
-		return fmt.Errorf("Unable to create replication slot: %s", err)
+	//TODO REMOVE
+	sysident, err := pglogrepl.IdentifySystem(src.ctx, src.conn)
+	if err != nil {
+		return fmt.Errorf("IdentifySystem failed: %v", err)
+	}
+	src.Errorf(fmt.Sprintf("SystemID: %s  Timeline: %d XLogPos: %d (%s) DBName: %s", sysident.SystemID, sysident.Timeline, uint64(sysident.XLogPos), sysident.XLogPos, sysident.DBName))
+	//**********
+
+	if err = src.sub.CreateSlot(); err != nil {
+		if err == pgoutput.ErrorSlotExist {
+			src.Errorf("slot already exists: skip creation")
+			err = nil
+		} else {
+			return fmt.Errorf("Unable to create replication slot: %s", err)
+		}
 	}
 
 	return
 }
 
 // Name returns source name
-func (s *PSQL) Name() string {
-	return s.name
+func (src *PSQL) Name() string {
+	return src.name
 }
 
 // Type returns source type
 // Always "Source-PSQL"
-func (s *PSQL) Type() string {
-	return "Source-Postgres"
+func (src *PSQL) Type() string {
+	return "Source-Postgres2"
 }
 
 // Subscribe registers a function to be called on event arrival
-func (s *PSQL) Subscribe(sub sink.Sink) {
-	s.mux.Subscribe(sub)
+func (src *PSQL) Subscribe(sink sink.Sink) {
+	src.mux.Subscribe(sink)
 }
 
 // SetLogger sets a logger
-func (s *PSQL) SetLogger(l *common.Logger) {
-	s.Logger = l
+func (src *PSQL) SetLogger(l *common.Logger) {
+	src.Logger = l
 }
 
 // Main execution loop
-func (s *PSQL) fetch() {
+func (src *PSQL) fetch() {
 	var err error
 
-	defer s.wg.Done()
+	defer src.wg.Done()
 
 	first := true
 	for {
-		walPos := atomic.LoadUint64(&s.walPositionPersisted)
+		walPos := atomic.LoadUint64(&src.walPositionPersisted)
 
 		select {
 		// Return if the context is canceled
 		// This should be caught by (err == nil) below, but just in case
-		case <-s.ctx.Done():
+		case <-src.ctx.Done():
 			return
 
 		// Try to start replication indefinitely
@@ -264,7 +283,7 @@ func (s *PSQL) fetch() {
 			}
 
 			// If it's not the first iteration - try to recreate the connection from scratch
-			if err = s.setup(); err != nil {
+			if err = src.setup(); err != nil {
 				if err == context.Canceled {
 					return
 				}
@@ -273,121 +292,128 @@ func (s *PSQL) fetch() {
 			}
 
 		start:
-			s.Logf("Starting replication at WAL position %d", walPos)
-			s.setError(nil)
+			src.Logf("Starting replication at WAL position %d (%s)", walPos, pglogrepl.LSN(walPos))
+			src.setError(nil)
 			// err will be nil only in case of context cancellation (correct shutdown)
-			if err = s.sub.Start(s.ctx, walPos, s.process); err == nil {
+			if err = src.sub.Start(src.ctx, walPos, time.Millisecond*100, src.process); err == nil {
 				return
 			}
 
 		oops:
-			atomic.AddUint64(&s.stats.replicationErrors, 1)
-			s.setError(err)
-			walPos = atomic.LoadUint64(&s.walPositionPersisted)
+			atomic.AddUint64(&src.stats.replicationErrors, 1)
+			src.setError(err)
+			walPos = atomic.LoadUint64(&src.walPositionPersisted)
 			// Send the error to listeners
-			s.Errorf("Replication error (walPositionPersisted: %d): %s", walPos, err)
+			src.Errorf("Replication error (walPositionPersisted: %d): %s", walPos, err)
 
 			// Wait to retry
 			select {
-			case <-s.ctx.Done():
+			case <-src.ctx.Done():
 				return
-			case <-time.After(s.cfg.startRetryInterval):
+			case <-time.After(src.cfg.startRetryInterval):
 			}
 		}
 	}
 }
 
-func (s *PSQL) process(m pgoutput.Message, walPos uint64) (err error) {
-	// These come with walPos == 0
-	switch v := m.(type) {
-	// Relation is the metadata of the table - we cache it locally and then look up on the receipt of the row
-	// Potential unbounded map growth, but in practice shouldn't happen as the table count is limited
-	case pgoutput.Relation:
-		s.relationSet.Add(v)
-		return
-	// This is not used now
-	case pgoutput.Type:
-		return
+func (src *PSQL) process(messages []pgoutput.Message) (err error) {
+	for _, m := range messages {
+		// These come with walPos == 0
+		switch v := m.(type) {
+		// Relation is the metadata of the table - we cache it locally and then look up on the receipt of the row
+		// Potential unbounded map growth, but in practice shouldn't happen as the table count is limited
+		case *pgoutput.Relation:
+			src.Logf("Relation: %+v", v)
+			src.relationSet.Add(*v)
+			continue
+		// This is not used now
+		case *pgoutput.Type:
+			continue
+		}
+
+		// Check just in case
+		if m.WalStart() == 0 {
+			continue
+		}
+
+		var ev event.Event
+		t := time.Now()
+		switch v := m.(type) {
+		case *pgoutput.Insert:
+			ev, err = src.generateEvent(event.ActionInsert, v.RelationID, v.Row)
+		case *pgoutput.Update:
+			ev, err = src.generateEvent(event.ActionUpdate, v.RelationID, v.Row)
+		case *pgoutput.Delete:
+			ev, err = src.generateEvent(event.ActionDelete, v.RelationID, v.Row)
+		default:
+			// Ignore all other events for now (Begin, Commit etc)
+			// Their WAL position is equal to an actual INSERT/UPDATE/DELETE event, so don't persist it
+			continue
+		}
+
+		promTags := append(src.promTags, ev.Table)
+
+		// Report the error if any
+		if err != nil {
+			atomic.AddUint64(&src.stats.eventErrors, 1)
+			src.Errorf("Error generating event: %s", err)
+			continue
+		}
+
+		defer func() {
+			dur := time.Since(t)
+			prom.Observe(promTags, dur)
+			atomic.AddUint64(&src.stats.events, 1)
+			src.LogVerboseEv(ev.UUID, "Event (%+v): %.4f sec", ev, dur.Seconds())
+		}()
+
+		ev.UUID = uuid.Must(uuid.NewV4()).String()
+		ev.WALEndPosition = m.WalEnd()
+		ev.Ack = func() {
+			endLSN := m.WalEnd()
+			atomic.StoreUint64(&src.walPosition, endLSN)
+			src.persistWAL()
+		}
+
+		src.LogDebugEv(ev.UUID, "Got message '%#v' (wal %d)", m, m.WalStart())
+		src.mux.Push(ev, nil)
 	}
 
-	// Check just in case
-	if walPos == 0 {
-		return
-	}
-
-	atomic.StoreUint64(&s.walPosition, walPos)
-
-	var ev event.Event
-	t := time.Now()
-	switch v := m.(type) {
-	case pgoutput.Insert:
-		ev, err = s.generateEvent(event.ActionInsert, v.RelationID, v.Row)
-	case pgoutput.Update:
-		ev, err = s.generateEvent(event.ActionUpdate, v.RelationID, v.Row)
-	case pgoutput.Delete:
-		ev, err = s.generateEvent(event.ActionDelete, v.RelationID, v.Row)
-	default:
-		// Ignore all other events for now (Begin, Commit etc)
-		// Their WAL position is equal to an actual INSERT/UPDATE/DELETE event, so don't persist it
-		return
-	}
-
-	promTags := append(s.promTags, ev.Table)
-
-	// Report the error if any
-	if err != nil {
-		atomic.AddUint64(&s.stats.eventErrors, 1)
-		s.Errorf("Error generating event: %s", err)
-		return
-	}
-
-	defer func() {
-		dur := time.Since(t)
-		prom.Observe(promTags, dur)
-		atomic.AddUint64(&s.stats.events, 1)
-		s.LogVerboseEv(ev.UUID, "Event (%+v): %.4f sec", ev, dur.Seconds())
-	}()
-
-	ev.UUID = uuid.Must(uuid.NewV4()).String()
-	ev.WALPosition = walPos
-
-	s.LogDebugEv(ev.UUID, "Got message '%#v' (wal %d)", m, walPos)
-	s.mux.Push(ev, nil)
 	return
 }
 
 // Persist the WAL log position to Bolt
-func (s *PSQL) persistWAL() {
+func (src *PSQL) persistWAL() {
 	// For testing purposes moslty
-	if s.boltDB == nil {
+	if src.boltDB == nil {
 		return
 	}
 
-	walPos := atomic.LoadUint64(&s.walPosition)
+	walPos := atomic.LoadUint64(&src.walPosition)
 
 	// Retry forever in case of some Bolt errors (out of disk space?)
-	_ = common.RetryForever(s.ctx, common.RetryParams{
-		F:            func() error { return s.boltDB.CounterSet(s.boltBucket, db.CounterWALPos, walPos) },
+	_ = common.RetryForever(src.ctx, common.RetryParams{
+		F:            func() error { return src.boltDB.CounterSet(src.boltBucket, db.CounterWALPos, walPos) },
 		Interval:     time.Second,
-		Logger:       s.Logger,
+		Logger:       src.Logger,
 		ErrorMsg:     "Unable to flush WAL position to Bolt (retry %d): %s",
-		ErrorCounter: &s.stats.persistErrors,
+		ErrorCounter: &src.stats.persistErrors,
 	})
 
-	atomic.StoreUint64(&s.walPositionPersisted, walPos)
-	s.Debugf("WAL persisted at position %d", walPos)
+	atomic.StoreUint64(&src.walPositionPersisted, walPos)
+	src.Debugf("WAL persisted at position %d", walPos)
 }
 
-func (s *PSQL) generateEvent(action string, relationID uint32, row []pgoutput.Tuple) (ev event.Event, err error) {
-	rel, ok := s.relationSet.Get(relationID)
+func (src *PSQL) generateEvent(action string, relationID uint32, row []pgoutput.Tuple) (ev event.Event, err error) {
+	rel, ok := src.relationSet.Get(relationID)
 	if !ok {
 		err = fmt.Errorf("Relation with ID '%d' not found in relationSet", relationID)
 		return
 	}
 
 	ev = event.Event{
-		Host:      s.connConfig.Host,
-		Database:  s.connConfig.Database,
+		Host:      src.connConfig.Host,
+		Database:  src.connConfig.Database,
 		Table:     rel.Name,
 		Action:    action,
 		Timestamp: time.Now(),
@@ -398,7 +424,7 @@ func (s *PSQL) generateEvent(action string, relationID uint32, row []pgoutput.Tu
 		ev.Host = "unknown"
 	}
 
-	vals, err := s.relationSet.Values(relationID, row)
+	vals, err := src.relationSet.Values(relationID, row)
 	if err != nil {
 		err = fmt.Errorf("Unable to decode values: %s", err)
 		return
@@ -422,7 +448,7 @@ func (s *PSQL) generateEvent(action string, relationID uint32, row []pgoutput.Tu
 
 		default:
 			// Just skip unsupported columns for now, while notifying the user
-			s.Errorf("Table %s column %s: unsupported type (%T)", rel.Name, n, val)
+			src.Errorf("Table %s column %s: unsupported type (%T)", rel.Name, n, val)
 		}
 	}
 
@@ -430,45 +456,49 @@ func (s *PSQL) generateEvent(action string, relationID uint32, row []pgoutput.Tu
 }
 
 // Stats returns source's statistics
-func (s *PSQL) Stats() string {
+func (src *PSQL) Stats() string {
 	return fmt.Sprintf("events: %d, eventErrors: %d, replicaErrors: %d, persistErrors: %d, walPos: %d, walPosPersist: %d",
-		atomic.LoadUint64(&s.stats.events),
-		atomic.LoadUint64(&s.stats.eventErrors),
-		atomic.LoadUint64(&s.stats.replicationErrors),
-		atomic.LoadUint64(&s.stats.persistErrors),
-		atomic.LoadUint64(&s.walPosition),
-		atomic.LoadUint64(&s.walPositionPersisted),
+		atomic.LoadUint64(&src.stats.events),
+		atomic.LoadUint64(&src.stats.eventErrors),
+		atomic.LoadUint64(&src.stats.replicationErrors),
+		atomic.LoadUint64(&src.stats.persistErrors),
+		atomic.LoadUint64(&src.walPosition),
+		atomic.LoadUint64(&src.walPositionPersisted),
 	)
 }
 
 // Status returns the status for the source
-func (s *PSQL) Status() error {
-	s.RLock()
-	defer s.RUnlock()
-	return s.err
+func (src *PSQL) Status() error {
+	src.RLock()
+	defer src.RUnlock()
+	return src.err
+}
+
+func (src *PSQL) flushWalPosition() {
+	src.Flush()
 }
 
 // Flush reports to PostgreSQL that all events are consumed and applied
 // This allows it to remove logs.
-func (s *PSQL) Flush() (err error) {
-	s.Lock()
-	defer s.Unlock()
+func (src *PSQL) Flush() (err error) {
+	src.Lock()
+	defer src.Unlock()
 
-	if s.err != nil {
+	if src.err != nil {
 		return fmt.Errorf("Source is not in a stable state")
 	}
 
-	if err = s.sub.Flush(); err != nil {
-		s.Errorf("Unable to Flush() subscription: %s", err)
+	if err = src.sub.FlushWalPosition(atomic.LoadUint64(&src.walPositionPersisted)); err != nil {
+		src.Errorf("Unable to Flush() subscription: %s", err)
 	} else {
-		s.Logf("Flushed: %s", s.Stats())
+		src.Logf("Flushed: %s", src.Stats())
 	}
 
 	return
 }
 
-func (s *PSQL) setError(err error) {
-	s.Lock()
-	s.err = err
-	s.Unlock()
+func (src *PSQL) setError(err error) {
+	src.Lock()
+	src.err = err
+	src.Unlock()
 }

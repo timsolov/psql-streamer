@@ -7,8 +7,8 @@ import (
 
 	"github.com/segmentio/kafka-go"
 
-	"github.com/blind-oracle/psql-streamer/common"
-	"github.com/blind-oracle/psql-streamer/event"
+	"github.com/timsolov/psql-streamer/common"
+	"github.com/timsolov/psql-streamer/event"
 )
 
 type passthroughEventHandler struct {

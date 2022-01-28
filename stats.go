@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/blind-oracle/psql-streamer/common"
+	"github.com/timsolov/psql-streamer/common"
 )
 
 func tickerWorker() {

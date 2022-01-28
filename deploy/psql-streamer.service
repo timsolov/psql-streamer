@@ -1,6 +1,6 @@
 [Unit]
 Description=Service for streaming PostgreSQL events
-Documentation=https://github.com/blind-oracle/psql-streamer
+Documentation=https://github.com/timsolov/psql-streamer
 After=network.target
 
 [Service]

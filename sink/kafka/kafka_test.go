@@ -1,11 +1,12 @@
 package kafkasink
 
 import (
-	"github.com/blind-oracle/psql-streamer/event"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/timsolov/psql-streamer/event"
 )
 
 func Test_Kafka(t *testing.T) {

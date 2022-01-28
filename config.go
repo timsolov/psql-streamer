@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blind-oracle/psql-streamer/db"
-	"github.com/blind-oracle/psql-streamer/sink"
-	"github.com/blind-oracle/psql-streamer/source"
 	"github.com/spf13/viper"
+	"github.com/timsolov/psql-streamer/db"
+	"github.com/timsolov/psql-streamer/sink"
+	"github.com/timsolov/psql-streamer/source"
 )
 
 // Config structure

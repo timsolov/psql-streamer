@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/blind-oracle/psql-streamer/common"
-	"github.com/blind-oracle/psql-streamer/event"
 	"github.com/nats-io/nats.go"
 	"github.com/spf13/viper"
+	"github.com/timsolov/psql-streamer/common"
+	"github.com/timsolov/psql-streamer/event"
 )
 
 // stub: s *JetStreamSink sink.Sink
@@ -51,6 +51,9 @@ func New(name string, v *viper.Viper) (s *JetStreamSink, err error) {
 		opts = append(opts, nats.Token(v.GetString("token")))
 	}
 
+	s.Logger = common.LoggerCreate(s, v)
+	s.promTags = []string{s.Name(), s.Type()}
+
 	opts = append(opts,
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(10),
@@ -66,9 +69,6 @@ func New(name string, v *viper.Viper) (s *JetStreamSink, err error) {
 	if s.js, err = s.conn.JetStream(); err != nil {
 		return nil, fmt.Errorf("could not create Jetstream context: %w", err)
 	}
-
-	s.Logger = common.LoggerCreate(s, v)
-	s.promTags = []string{s.Name(), s.Type()}
 
 	return s, nil
 }
@@ -97,19 +97,24 @@ func (s *JetStreamSink) ProcessEventsBatch(events []event.Event) error {
 			return fmt.Errorf("payload column: absent")
 		}
 
-		_, err := s.js.PublishAsync(subject, []byte(payload), nats.MsgId(strconv.FormatInt(id, 10)))
+		ctx, cancel := context.WithTimeout(s.ctx, s.writeTimeout)
+
+		_, err := s.js.Publish(subject, []byte(payload),
+			nats.MsgId(strconv.FormatInt(id, 10)),
+			nats.Context(ctx),
+		)
+
+		cancel()
+
 		if err != nil {
-			return fmt.Errorf("publish async to JetStream: %w", err)
+			return fmt.Errorf("publish to JetStream: %w", err)
 		}
 
 		s.LogVerboseEv(event.UUID, "Event (%+v)", event)
-	}
-	select {
-	case <-s.ctx.Done():
-		return fmt.Errorf("ProcessEventsBatch: aborted by ctx done")
-	case <-s.js.PublishAsyncComplete():
-	case <-time.After(s.writeTimeout):
-		return fmt.Errorf("ProcessEventsBatch: timeout occurred while publishing messages")
+
+		if event.Ack != nil {
+			event.Ack()
+		}
 	}
 
 	s.Debugf("(%d messages) successfully written in %.4f sec", msgCount, time.Since(start).Seconds())
@@ -132,7 +137,7 @@ func (s *JetStreamSink) SetLogger(l *common.Logger) {
 }
 
 func (s *JetStreamSink) Stats() string {
-	t := fmt.Sprintf("total: %d, no subject: %d, skipped: %d, errors: %d, jetstream msgs sent: %d, handlers:",
+	t := fmt.Sprintf("total: %d, no subject: %d, skipped: %d, errors: %d, jetstream msgs sent: %d",
 		atomic.LoadUint64(&s.stats.total),
 		atomic.LoadUint64(&s.stats.noSubject),
 		atomic.LoadUint64(&s.stats.skipped),

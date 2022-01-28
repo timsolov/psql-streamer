@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/blind-oracle/psql-streamer/common"
-	"github.com/blind-oracle/psql-streamer/event"
 	"github.com/spf13/viper"
+	"github.com/timsolov/psql-streamer/common"
+	"github.com/timsolov/psql-streamer/event"
 )
 
 // Subset of Sink's methods used by Mux

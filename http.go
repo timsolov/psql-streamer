@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/blind-oracle/psql-streamer/common"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/timsolov/psql-streamer/common"
 )
 
 var httpServer *http.Server
